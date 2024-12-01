@@ -16,7 +16,7 @@
     <style>
         .card-img-top,
         #modalCapa {
-            height:  auto;
+            height: auto;
             object-fit: cover;
             aspect-ratio: 1/1;
             border-radius: 10px;
@@ -34,6 +34,12 @@
 
         #modalDescricao {
             width: 100%;
+        }
+
+        /* Estilo adicional para o spinner de loading */
+        #loadingSpinner {
+            display: none;
+            margin: 20px 0;
         }
     </style>
 </head>
@@ -54,6 +60,12 @@
                 </div>
                 <div class="modal-body">
                     <img id="modalCapa" src="" alt="Capa do Disco">
+                    
+                    <!-- Spinner de Loading -->
+                    <div id="loadingSpinner" class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Carregando...</span>
+                    </div>
+
                     <div id="modalDescricao"></div>
                 </div>
                 <div class="modal-footer">
@@ -67,7 +79,9 @@
         const API_KEY = '8175fA5f6098c5301022f475da32a2aa';
         let token = '';
         let numeroInicio = 1;
-        const quantidade = 12;
+        let quantidade = 12;
+        const limite = 105; // Limite de discos da API
+        let discosCarregados = [];
 
         $(document).ready(async function () {
             token = await getToken();
@@ -96,8 +110,17 @@
                     type: 'GET',
                     headers: { TokenApiUCS: token },
                 });
+
+                // Armazenar os discos carregados
+                discosCarregados = [...discosCarregados, ...discos];
+
                 renderDiscos(discos);
                 numeroInicio += quantidade;
+
+                // Se atingir o limite de discos, reinicia a contagem para repetir os discos
+                if (discosCarregados.length >= limite) {
+                    discosCarregados = discosCarregados.slice(0, limite); // Limita a 105 discos
+                }
             } catch (err) {
                 console.error('Erro ao carregar discos:', err);
             }
@@ -111,7 +134,7 @@
                     : 'https://via.placeholder.com/400x300';
 
                 const card = `
-                    <div class="col-md-4">
+                    <div class="col-md-6">
                         <div class="card h-100">
                             <img src="${capa}" 
                                 class="card-img-top cursor-pointer" 
@@ -128,7 +151,13 @@
         function configurarScrollInfinito() {
             $(window).on('scroll', async function () {
                 if ($(window).scrollTop() + $(window).height() >= $(document).height() - 50) {
-                    await carregarDiscos();
+                    if (discosCarregados.length < limite) {
+                        await carregarDiscos();
+                    } else {
+                        // Recarrega os discos a partir do início quando atingir o limite
+                        numeroInicio = 1;  // Reinicia a contagem
+                        renderDiscos(discosCarregados);
+                    }
                 }
             });
         }
@@ -140,7 +169,10 @@
 
             // Configurações iniciais do modal
             $('#modalCapa').attr('src', 'https://via.placeholder.com/400x300');
-            $('#modalDescricao').html('<p>Carregando...</p>');
+            $('#modalDescricao').html('');
+            $('#loadingSpinner').show();  // Exibe o spinner
+
+            // Configura o título do modal
             $('#discoModalLabel').text('Detalhes do Disco');
 
             try {
@@ -155,28 +187,24 @@
                 console.log("Detalhes do Disco carregados:", response);
                 $('#modalCapa').attr('src', `data:image/png;base64,${response.imagemEmBase64}`);
                 $('#modalDescricao').html(`
-            <p><strong>Título:</strong> ${response.titulo || 'Título indisponível'}</p>
-            <p><strong>Artista:</strong> ${response.artista || 'Artista desconhecido'}</p>
-            <p><strong>Ano:</strong> ${response.ano || 'Ano não especificado'}</p>
-            <p><strong>Gênero:</strong> ${response.genero || 'Gênero não especificado'}</p>
-            <p><strong>Descrição:</strong> ${response.descricao || 'Descrição não disponível'}</p>
-        `);
-                $('#discoModalLabel').text(response.titulo || 'Detalhes do Disco');
+                    <p><strong>Descrição Primária:</strong> ${response.descricaoPrimaria || 'Não disponível'}</p>
+                    <p><strong>Descrição Secundária:</strong> ${response.descricaoSecundaria || 'Não disponível'}</p>
+                `);
             } catch (error) {
                 // Tratamento de erro
                 console.error("Erro ao carregar detalhes do disco:", error);
 
-                // Mostrar mensagem amigável ao usuário
                 $('#modalDescricao').html(`
-            <p class="text-danger">
-                <strong>Erro:</strong> Não foi possível carregar os detalhes do disco. Verifique se o disco existe ou se há um problema com a API.
-            </p>
-        `);
+                    <p class="text-danger">
+                        <strong>Erro:</strong> Não foi possível carregar os detalhes do disco.
+                    </p>
+                `);
                 $('#modalCapa').attr('src', 'https://via.placeholder.com/400x300');
                 $('#discoModalLabel').text(`Erro ao carregar disco #${discoId}`);
+            } finally {
+                $('#loadingSpinner').hide();  // Oculta o spinner após o carregamento
             }
         });
-
     </script>
 </body>
 
