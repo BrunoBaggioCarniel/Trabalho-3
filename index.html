@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trabalho 3 - Discos</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.1.js"></script>
+
+    <style>
+        .card-img-top,
+        #modalCapa {
+            height:  auto;
+            object-fit: cover;
+            aspect-ratio: 1/1;
+            border-radius: 10px;
+        }
+
+        .modal-dialog {
+            max-width: 800px;
+        }
+
+        .modal-body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #modalDescricao {
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center mb-4">Lista de Discos</h1>
+        <div id="discosContainer" class="row gy-4"></div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal fade" id="discoModal" tabindex="-1" aria-labelledby="discoModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="discoModalLabel">Detalhes do Disco</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <img id="modalCapa" src="" alt="Capa do Disco">
+                    <div id="modalDescricao"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_KEY = '8175fA5f6098c5301022f475da32a2aa';
+        let token = '';
+        let numeroInicio = 1;
+        const quantidade = 12;
+
+        $(document).ready(async function () {
+            token = await getToken();
+            await carregarDiscos();
+            configurarScrollInfinito();
+        });
+
+        async function getToken() {
+            try {
+                const response = await $.ajax({
+                    url: 'https://ucsdiscosapi.azurewebsites.net/Discos/autenticar',
+                    type: 'POST',
+                    headers: { ChaveApi: API_KEY },
+                });
+                console.log('Token obtido:', response);
+                return response;
+            } catch (err) {
+                console.error('Erro ao autenticar:', err);
+            }
+        }
+
+        async function carregarDiscos() {
+            try {
+                const discos = await $.ajax({
+                    url: `https://ucsdiscosapi.azurewebsites.net/Discos/records?numeroInicio=${numeroInicio}&quantidade=${quantidade}`,
+                    type: 'GET',
+                    headers: { TokenApiUCS: token },
+                });
+                renderDiscos(discos);
+                numeroInicio += quantidade;
+            } catch (err) {
+                console.error('Erro ao carregar discos:', err);
+            }
+        }
+
+        function renderDiscos(discos) {
+            const container = $('#discosContainer');
+            discos.forEach((disco) => {
+                const capa = disco.imagemEmBase64
+                    ? `data:image/png;base64,${disco.imagemEmBase64}`
+                    : 'https://via.placeholder.com/400x300';
+
+                const card = `
+                    <div class="col-md-4">
+                        <div class="card h-100">
+                            <img src="${capa}" 
+                                class="card-img-top cursor-pointer" 
+                                alt="Capa do Disco" 
+                                data-bs-toggle="modal" 
+                                data-bs-target="#discoModal" 
+                                data-id="${disco.id}"> <!-- Passa o ID -->
+                        </div>
+                    </div>`;
+                container.append(card);
+            });
+        }
+
+        function configurarScrollInfinito() {
+            $(window).on('scroll', async function () {
+                if ($(window).scrollTop() + $(window).height() >= $(document).height() - 50) {
+                    await carregarDiscos();
+                }
+            });
+        }
+
+        $('#discoModal').on('show.bs.modal', async function (event) {
+            const button = $(event.relatedTarget);
+            const discoId = button.data('id');
+            console.log("Tentando carregar detalhes do disco com ID:", discoId);
+
+            // Configurações iniciais do modal
+            $('#modalCapa').attr('src', 'https://via.placeholder.com/400x300');
+            $('#modalDescricao').html('<p>Carregando...</p>');
+            $('#discoModalLabel').text('Detalhes do Disco');
+
+            try {
+                // Requisitar à API para obter detalhes do disco
+                const response = await $.ajax({
+                    url: `https://ucsdiscosapi.azurewebsites.net/Discos/record?numero=${discoId}`,
+                    type: 'GET',
+                    headers: { TokenApiUCS: token },
+                });
+
+                // Atualizar o modal com os detalhes do disco
+                console.log("Detalhes do Disco carregados:", response);
+                $('#modalCapa').attr('src', `data:image/png;base64,${response.imagemEmBase64}`);
+                $('#modalDescricao').html(`
+            <p><strong>Título:</strong> ${response.titulo || 'Título indisponível'}</p>
+            <p><strong>Artista:</strong> ${response.artista || 'Artista desconhecido'}</p>
+            <p><strong>Ano:</strong> ${response.ano || 'Ano não especificado'}</p>
+            <p><strong>Gênero:</strong> ${response.genero || 'Gênero não especificado'}</p>
+            <p><strong>Descrição:</strong> ${response.descricao || 'Descrição não disponível'}</p>
+        `);
+                $('#discoModalLabel').text(response.titulo || 'Detalhes do Disco');
+            } catch (error) {
+                // Tratamento de erro
+                console.error("Erro ao carregar detalhes do disco:", error);
+
+                // Mostrar mensagem amigável ao usuário
+                $('#modalDescricao').html(`
+            <p class="text-danger">
+                <strong>Erro:</strong> Não foi possível carregar os detalhes do disco. Verifique se o disco existe ou se há um problema com a API.
+            </p>
+        `);
+                $('#modalCapa').attr('src', 'https://via.placeholder.com/400x300');
+                $('#discoModalLabel').text(`Erro ao carregar disco #${discoId}`);
+            }
+        });
+
+    </script>
+</body>
+
+</html>
